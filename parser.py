@@ -14,7 +14,7 @@ header = {
     '(KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
 url = 'https://www.mcdonalds.com/ua/uk-ua/eat/fullmenu.html'
 
-def click_on_page(link):
+def click_on_page(link:str) -> str:
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service)
     full_url = f'https://www.mcdonalds.com{link}'
@@ -38,12 +38,12 @@ def click_on_page(link):
         return selenium_content
 
     except Exception as e:
-        print(f"Error occurred: {e}")
+        return f"Error: {e}"
     finally:
         driver.quit()
 
 
-def links_scraper(url, header):
+def links_scraper(url:str, header:dict) -> list[str]:
     response = requests.get(url, headers=header)
     content_html = BeautifulSoup(response.text, 'html.parser')
     if response.status_code == 200:
@@ -52,19 +52,19 @@ def links_scraper(url, header):
             links.append(link.get('href'))
         return links
     else:
-        return f"Error: {response.status_code}"
+        return [f"Error: {response.status_code}"]
     
-def name_searcher(content_html):
+def name_searcher(content_html:BeautifulSoup) -> str:
     header = content_html.find('h1')
-    name = header.find('span', class_="cmp-product-details-main__heading-title").text
+    name = header.find('span', class_="cmp-product-details-main__heading-title").text if header else ''
     return name
 
-def description_searcher(content_html):
+def description_searcher(content_html:BeautifulSoup) -> str:
     description_block = content_html.find('div', class_="cmp-product-details-main__description")
-    description_text = description_block.find('span', class_='body').text.replace('\xa0', ' ')
+    description_text = description_block.get_text(strip=True) if description_block else ''
     return description_text
 
-def nutrition_primary_searcher(content_html):
+def nutrition_primary_searcher(content_html:BeautifulSoup) -> dict:
     target_li = list(content_html.find_all('li', class_='cmp-nutrition-summary__heading-primary-item'))
     nutrition_dict = {}
     for li in target_li:
@@ -81,10 +81,10 @@ def nutrition_primary_searcher(content_html):
         nutrition_dict[metric_name] = f'{cleaned_value_text}, {cleaned_metric_number}'
     return nutrition_dict
 
-def nutrition_secondary_searcher(content_html):
+def nutrition_secondary_searcher(content_html:BeautifulSoup) -> dict:
     nutrition_dict = {}
     target_li = content_html.find_all('li', class_='label-item')
-    
+
     for li in target_li:
         metric_span = li.find('span', class_='metric')
         metric_name = metric_span.get_text(strip=True).replace(':', '') if metric_span else ''
@@ -93,17 +93,17 @@ def nutrition_secondary_searcher(content_html):
         cleaned_visible_value = visible_value_tag.text.replace('\n', ' ').replace('  ', '') if visible_value_tag else ''
         if visible_value_tag:
             nutrition_dict[metric_name] = cleaned_visible_value
-
     return nutrition_dict
 
 
-def products_parser(links):
+def products_parser(links:list[str]) -> dict:
     result_json = {}
     for link in links:
         content_html = click_on_page(link)
         if content_html:
             content_html = BeautifulSoup(content_html, 'html.parser')
-            name_and_description = {
+            link_name_description = {
+                'link' : link,
                 'name': name_searcher(content_html), 
                 'description': description_searcher(content_html)
                 }
@@ -111,15 +111,16 @@ def products_parser(links):
                 **nutrition_primary_searcher(content_html),
                 **nutrition_secondary_searcher(content_html)
             }
-            result_json[link] = { **name_and_description, **nutrients }
+            product_name = link_name_description['name']
+            result_json[product_name] = { **link_name_description, **nutrients }
+            products_to_json(result_json)
         else:
             print(f"Error: during fetching {link}")
     return result_json
 
-def products_to_json(data):
+def products_to_json(data:dict) -> None:
     with open('products.json', 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 links = links_scraper(url, header)
 result = products_parser(links)
-products_to_json(result)
