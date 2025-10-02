@@ -7,12 +7,22 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-import re
 
 header = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
     '(KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
 url = 'https://www.mcdonalds.com/ua/uk-ua/eat/fullmenu.html'
+
+NUTRITION_FIELD_MAP = {
+    'Калорійність': 'calories',
+    'Жири': 'fats',
+    'Вуглеводи': 'carbs',
+    'Білки': 'proteins',
+    'НЖК': 'unsaturated fats',
+    'Цукор': 'sugar',
+    'Сіль': 'salt',
+    'Порція': 'portion'
+}
 
 def click_on_page(link:str) -> str:
     service = Service(ChromeDriverManager().install())
@@ -64,36 +74,41 @@ def description_searcher(content_html:BeautifulSoup) -> str:
     description_text = description_block.get_text(strip=True) if description_block else ''
     return description_text
 
+NEEDED_FIELDS = set(NUTRITION_FIELD_MAP.values())
+
 def nutrition_primary_searcher(content_html:BeautifulSoup) -> dict:
     target_li = list(content_html.find_all('li', class_='cmp-nutrition-summary__heading-primary-item'))
     nutrition_dict = {}
     for li in target_li:
+        metric_span = li.find('span', class_='metric')
+        metric_name_ua = metric_span.get_text(strip=True).replace(':', '').split()[0] if metric_span else ''
+        metric_name_en = NUTRITION_FIELD_MAP.get(metric_name_ua)
+        if not metric_name_en:
+            continue
         value_span = li.find('span', class_='value')
-        value = value_span.find('span', attrs={'aria-hidden': 'true'})
+        value = value_span.find('span', attrs={'aria-hidden': 'true'}) if value_span else None
         value_text = value.get_text(strip=True) if value else ''
         cleaned_value_text = value_text.replace('\n', ' ').replace('  ', '')
-
-        metric_span = li.find('span', class_='metric')
         metric_number = metric_span.find('span', attrs={'aria-hidden': 'true'}) if metric_span else None
-        metric_name = metric_span.get_text(strip=True).replace(':', '').split()[0]
         cleaned_metric_number = metric_number.text.replace('\n', ' ').replace('  ', '') if metric_number else ''
-
-        nutrition_dict[metric_name] = f'{cleaned_value_text}, {cleaned_metric_number}'
-    return nutrition_dict
+        nutrition_dict[metric_name_en] = f'{cleaned_value_text}, {cleaned_metric_number}' if cleaned_metric_number else cleaned_value_text
+    return {k: v for k, v in nutrition_dict.items() if k in NEEDED_FIELDS}
 
 def nutrition_secondary_searcher(content_html:BeautifulSoup) -> dict:
     nutrition_dict = {}
     target_li = content_html.find_all('li', class_='label-item')
-
     for li in target_li:
         metric_span = li.find('span', class_='metric')
-        metric_name = metric_span.get_text(strip=True).replace(':', '') if metric_span else ''
+        metric_name_ua = metric_span.get_text(strip=True).replace(':', '') if metric_span else ''
+        metric_name_en = NUTRITION_FIELD_MAP.get(metric_name_ua)
+        if not metric_name_en:
+            continue
         value_span = li.find('span', class_='value')
         visible_value_tag = value_span.find('span', attrs={'aria-hidden': 'true'}) if value_span else None
         cleaned_visible_value = visible_value_tag.text.replace('\n', ' ').replace('  ', '') if visible_value_tag else ''
         if visible_value_tag:
-            nutrition_dict[metric_name] = cleaned_visible_value
-    return nutrition_dict
+            nutrition_dict[metric_name_en] = cleaned_visible_value
+    return {k: v for k, v in nutrition_dict.items() if k in NEEDED_FIELDS}
 
 
 def products_parser(links:list[str]) -> dict:
