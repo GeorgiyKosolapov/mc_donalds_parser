@@ -71,22 +71,14 @@ def nutrition_primary_searcher(content_html):
         value_span = li.find('span', class_='value')
         value = value_span.find('span', attrs={'aria-hidden': 'true'})
         value_text = value.get_text(strip=True) if value else ''
+        cleaned_value_text = value_text.replace('\n', ' ').replace('  ', '')
 
         metric_span = li.find('span', class_='metric')
-        metric_name = ''
-        if metric_span:
-            metric_name = metric_span.find('span', attrs={'aria-hidden': 'true'})
-            metric_name = metric_name.get_text(strip=True).split('(')[0].strip() if metric_name else ''
+        metric_number = metric_span.find('span', attrs={'aria-hidden': 'true'}) if metric_span else None
+        metric_name = metric_span.get_text(strip=True).replace(':', '').split()[0]
+        cleaned_metric_number = metric_number.text.replace('\n', ' ').replace('  ', '') if metric_number else ''
 
-        daily_value = ''
-        if metric_span:
-            metric_text = metric_span.find('span', attrs={'aria-hidden': 'true'})
-            if metric_text:
-                match = re.search(r'\((\d+\s*%)', metric_text.get_text())
-                if match:
-                    daily_value = match.group(1)
-
-        nutrition_dict[metric_name] = f'{value_text}, {daily_value} DV'
+        nutrition_dict[metric_name] = f'{cleaned_value_text}, {cleaned_metric_number}'
     return nutrition_dict
 
 def nutrition_secondary_searcher(content_html):
@@ -98,19 +90,9 @@ def nutrition_secondary_searcher(content_html):
         metric_name = metric_span.get_text(strip=True).replace(':', '') if metric_span else ''
         value_span = li.find('span', class_='value')
         visible_value_tag = value_span.find('span', attrs={'aria-hidden': 'true'}) if value_span else None
+        cleaned_visible_value = visible_value_tag.text.replace('\n', ' ').replace('  ', '') if visible_value_tag else ''
         if visible_value_tag:
-            raw_value = visible_value_tag.get_text(strip=True)
-            match = re.search(r'([\d.,]+[г\w/]+)?\s*(\([\d\s\w/]+\))?', raw_value)
-            
-            if match:
-                value = match.group(1) or ''.replace('/g', '')
-                dv = match.group(2) or ''
-            else:
-                value = raw_value
-                dv = ''
-                
-            if metric_name:
-                nutrition_dict[metric_name] = f'{value} {dv}'.strip()
+            nutrition_dict[metric_name] = cleaned_visible_value
 
     return nutrition_dict
 
@@ -130,11 +112,14 @@ def products_parser(links):
                 **nutrition_secondary_searcher(content_html)
             }
             result_json[link] = { **name_and_description, **nutrients }
-            print(result_json)
         else:
-            print(f"Error: ")
-        break
+            print(f"Error: during fetching {link}")
+    return result_json
+
+def products_to_json(data):
+    with open('products.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 links = links_scraper(url, header)
-products_parser(links)
-
+result = products_parser(links)
+products_to_json(result)
