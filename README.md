@@ -1,11 +1,15 @@
 McDonald's Ukraine Menu Scraper & API
-Test Task for Udata Company
 
 СТРУКТУРА ПРОЕКТУ:
+
 ├── parser.py          # Скрейпер для збору даних з сайту McDonald's
+
 ├── handles.py         # FastAPI сервер з API ендпоінтами
+
 ├── requirements.txt   # Залежності Python
+
 ├── products.json      # Зібрані дані (автоматично створюється)
+
 └── README.txt         # Цей файл
 
 ТЕХНІЧНИЙ СТЕК:
